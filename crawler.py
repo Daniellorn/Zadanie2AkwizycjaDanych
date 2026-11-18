@@ -127,6 +127,5 @@ if __name__ == "__main__":
     print("Podaj maksymalną głębokość")
     max_depth = int(input())
 
-
     crawler_result = CrawlWikipedia(START_URL, max_depth)
     SaveToFiles(crawler_result)

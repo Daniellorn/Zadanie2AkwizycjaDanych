@@ -6,6 +6,7 @@ import sqlite3
 import numpy as np
 from collections import Counter, defaultdict
 from contextlib import closing
+import math
 
 
 words_to_remove = {
@@ -33,38 +34,54 @@ def CleanQuery(text):
     return text
 
 #AI
-def Read_docs_vectors(query_vector, db_path="Baza.db"):    
-    with closing(sqlite3.connect(db_path)) as db, db:
+def Read_docs_vectors(query_vector, db_path="Baza.db"):
+    if not query_vector:
+        return []
+
+    query_norm = math.sqrt(sum(val ** 2 for val in query_vector.values()))
+    if query_norm == 0.0:
+        return []
+
+    query_words = list(query_vector.keys())
+    placeholders = ','.join(['?'] * len(query_words))
+
+    with closing(sqlite3.connect(db_path)) as db:
         cursor = db.cursor()
-        cursor.execute("SELECT id, link, word, tfidf FROM document_vectors")
+        
+        cursor.execute(f"""
+            SELECT DISTINCT id FROM document_vectors WHERE word IN ({placeholders})
+        """, query_words)
+        candidate_ids = [row[0] for row in cursor.fetchall()]
+
+        if not candidate_ids:
+            return []
+
+        candidate_placeholders = ','.join(['?'] * len(candidate_ids))
+        cursor.execute(f"""
+            SELECT id, link, word, tfidf FROM document_vectors WHERE id IN ({candidate_placeholders})
+        """, candidate_ids)
         rows = cursor.fetchall()
 
-    docs_data = defaultdict(dict)
-    doc_links = {}
-    
+    docs_data = {}
     for doc_id, link, word, tfidf in rows:
-        docs_data[doc_id][word] = tfidf
-        doc_links[doc_id] = link
-
-    all_words = sorted(list(set(w for doc in docs_data.values() for w in doc.keys())))
-    
-    q_vec = np.array([query_vector.get(w, 0.0) for w in all_words], dtype=np.float32)
-    query_vector_norm = np.linalg.norm(q_vec)
+        if doc_id not in docs_data:
+            docs_data[doc_id] = {"link": link, "vector": {}}
+        docs_data[doc_id]["vector"][word] = tfidf
 
     vectors = []
+    
+    for doc_id, data in docs_data.items():
+        link = data["link"]
+        doc_dict = data["vector"]
 
-    for doc_id, doc_dict in docs_data.items():
-        link = doc_links[doc_id]
-        
-        doc_vector = np.array([doc_dict.get(w, 0.0) for w in all_words], dtype=np.float32)
-        doc_norm = np.linalg.norm(doc_vector)
+        doc_norm = math.sqrt(sum(val ** 2 for val in doc_dict.values()))
+        if doc_norm == 0.0:
+            continue
 
-        if query_vector_norm == 0 or doc_norm == 0:
-            dot_product = 0.0
-        else:
-            dot_product = np.dot(q_vec / query_vector_norm, doc_vector / doc_norm)
+        dot_product = sum(query_vector[w] * doc_dict[w] for w in query_vector if w in doc_dict)
 
-        vectors.append((doc_id, link, dot_product))
+        score = dot_product / (query_norm * doc_norm)
+        vectors.append((doc_id, link, score))
 
     result = heapq.nlargest(5, vectors, key=lambda x: x[2])
     return result

@@ -122,6 +122,28 @@ def CleanText(file):
 
     return id, link, text
 
+#AI
+class BuildDictionary(beam.CombineFn):
+
+    def create_accumulator(self):
+        return {}
+
+    def add_input(self, accumulator, element):
+        word, value = element
+        accumulator[word] = value
+        return accumulator
+
+    def merge_accumulators(self, accumulators):
+        result = {}
+
+        for accumulator in accumulators:
+            result.update(accumulator)
+
+        return result
+
+    def extract_output(self, accumulator):
+        return accumulator
+
 def run_pipeline():
     with beam.Pipeline() as pipeline:
 
@@ -198,27 +220,12 @@ def run_pipeline():
             #| beam.Map(print)
         )
 
-        vocabulary = (
-            tfidf
-            | "Pobieranie słowa z kolekcji tfidf" >> beam.Map(lambda x: x[2])
-            | "Wybieramy tylko te unikatowe" >> beam.Distinct()
-            | "Zamieniamy to w listę" >> beam.combiners.ToList()
-        )
-
         doc_vectors = (
             tfidf
-            | "Zmiana reprezentacji na ((id, filename), (slowo: tfidf)) - słownik o kluczu (id, filename) i wartości (slowo: tfidf)" >> beam.Map(lambda x: ((x[0], x[1]), {x[2]: x[3]}))
-            | "Połączenie słów z jednego dokumentu w jeden słownik" >> beam.CombinePerKey(lambda dicts: { 
-                word: value 
-                for d in dicts
-                for word, value in d.items()})
-            | "Uzupełnienie reszty 0.0" >> beam.Map(
-                lambda doc, vocab: (
-                    doc[0], {word: doc[1].get(word, 0.0) for word in vocab}
-                ),
-                vocab = beam.pvalue.AsSingleton(vocabulary)
-            )
-            #| beam.Map(print)
+            | "Zmiana reprezentacji na ((id, link), (slowo, tfidf))"
+                >> beam.Map(lambda x: ((x[0], x[1]), (x[2], x[3])))
+            | "Połączenie słów z jednego dokumentu w słownik"
+                >> beam.CombinePerKey(BuildDictionary())
         )
 
         save_result = (
@@ -231,7 +238,8 @@ def run_pipeline():
             idf
             | "Zbierz wartości IDF" >> beam.combiners.ToList()
             | "Zapisz IDF do bazy" >> beam.Map(save_idf_to_sqlite)
-    )
+        )
+    
 
 
 if __name__ == "__main__":
