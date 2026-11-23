@@ -18,6 +18,7 @@ SKIP_SUBSTR = ['#', '~', 'jpg', 'JPG', 'png', 'PNG', 'Specjalna', '?', '&']
 CALLS_LIMIT = 5
 PERIOD_SECONDS = 1
 
+#AI
 def GetLinksAndTextFromSite(response):
     soup = BeautifulSoup(response.text, "html.parser")
 
@@ -106,7 +107,7 @@ def SaveToFiles(crawled_data):
     for link, (title, text) in crawled_data.items():
         filename = title.replace('–', '').replace(' ', '_') + '.txt'
 
-        with open(os.path.join("artykuly", filename), "w", encoding="utf-8") as f:
+        with open(os.path.join("Dane", filename), "w", encoding="utf-8") as f:
             f.write(f'Link: {link}\n\n')
             f.write(text)
 
@@ -124,7 +125,7 @@ if __name__ == "__main__":
     rp.parse(response.text.splitlines())
 
 
-    print("Podaj maksymalną głębokość")
+    print("Podaj maksymalną głębokość (maks 5)")
     max_depth = int(input())
 
     crawler_result = CrawlWikipedia(START_URL, max_depth)

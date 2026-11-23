@@ -10,7 +10,7 @@ import uuid
 import math
 
 
-pattern = os.path.join(os.path.abspath('artykuly'), '*.txt')
+pattern = os.path.join(os.path.abspath('Dane'), '*.txt')
 
 #ai
 words_to_remove = {
